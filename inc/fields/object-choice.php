@@ -1,11 +1,4 @@
 <?php
-
-/*TODO:
-* - render functions for checklist, select and select tree
-* - hierarchy option  
-* - standardize options for normalize
-* - use render_attributes 
-*/ 
 // Prevent loading this file directly
 defined( 'ABSPATH' ) || exit;
 
@@ -73,17 +66,13 @@ abstract class RWMB_Object_Choice_Field extends RWMB_Field
 				$field['flatten'] = 'radio_list' === $field['field_type'] ? true : $field['flatten'];
 				$field['multiple'] = 'radio_list' === $field['field_type'] ? false : true;
 				$field = RWMB_Input_Field::normalize( $field );
-				$field['attributes']['class'] = "rwmb-choice";
-				$field['attributes']['id']   = false;
-				$field['attributes']['type'] = 'radio_list' === $field['field_type'] ? 'radio' : 'checkbox';			
 				break;
 			case 'select_advanced':
-				$field['attributes']['class'] = "rwmb-choice rwmb-select_advanced";
 				$field = RWMB_Select_Advanced_Field::normalize( $field );
 				$field['flatten'] = true;
 				break;
 			case 'select_tree':
-				$field['attributes']['multiple'] = false;
+				$field = RWMB_Select_Field::normalize( $field );
 				$field['multiple'] = true;
 				break;
 			case 'select':
@@ -91,8 +80,46 @@ abstract class RWMB_Object_Choice_Field extends RWMB_Field
 				$field = RWMB_Select_Field::normalize( $field );
 				break;
 		}
-
+		
 		return $field;
+	}
+	
+	/**
+	 * Get the attributes for a field
+	 *
+	 * @param array $field
+	 * @param mixed value
+	 *
+	 * @return array
+	 */
+	static function get_attributes( $field, $value = null )
+	{
+		switch ( $field['field_type'] )
+		{
+			case 'checkbox_list':
+			case 'radio_list':
+				$attributes = RWMB_Input_Field::get_attributes( $field, $value );
+				$attributes['class'] = "rwmb-choice";
+				$attributes['id']   = false;
+				$attributes['type'] = 'radio_list' === $field['field_type'] ? 'radio' : 'checkbox';			
+				break;
+			case 'select_advanced':
+				$attributes = RWMB_Select_Advanced_Field::get_attributes( $field, $value );
+				$attributes['class'] = "rwmb-choice rwmb-select_advanced";
+				break;
+			case 'select_tree':
+				$attributes = RWMB_Select_Field::get_attributes( $field, $value );
+				$attributes['multiple'] = false;
+				break;
+			case 'select':
+			default:
+				$attributes = RWMB_Select_Field::get_attributes( $field, $value );
+				break;
+		}
+		
+		$attributes['name'] .= ! $field['clone'] && $field['multiple'] ? '[]' : ''; 
+			
+		return $attributes;
 	}
 	
 	/**
@@ -103,10 +130,10 @@ abstract class RWMB_Object_Choice_Field extends RWMB_Field
 	static function get_db_fields()
 	{
 		return array(
-            'parent'    => '',
-            'id'        => '',
-            'label'     => '',              
-        );
+			'parent'    => '',
+			'id'        => '',
+			'label'     => '',              
+		);
 	}
 	
 	
@@ -157,12 +184,13 @@ abstract class RWMB_Object_Choice_Field extends RWMB_Field
 	static function render_select( $options, $meta, $field )
 	{
 		$field_class = RW_Meta_Box::get_class_name( $field );
+		$attributes = call_user_func( array( $field_class, 'get_attributes' ), $field, $meta );
 		$db_fields = call_user_func( array( $field_class, 'get_db_fields' ), $field );
 		$walker = new RWMB_Select_Walker( $db_fields, $field, $meta );
 		
 		$output = sprintf(
 			'<select %s>',
-			self::render_attributes( $field['attributes'] )
+			self::render_attributes( $attributes )
 		);
 		if( 'select' === $field['field_type'] && false === $field['multiple'] )
 		{
@@ -239,7 +267,8 @@ class RWMB_Select_Walker extends RWMB_Walker
 	 * @param int    $current_object_id    Item id.
 	 * @param array  $args
 	 */
-	public function start_el( &$output, $object, $depth = 0, $args = array(), $current_object_id = 0 ) {
+	public function start_el( &$output, $object, $depth = 0, $args = array(), $current_object_id = 0 ) 
+	{
         $label = $this->db_fields['label'];  
         $id =  $this->db_fields['id'];   
         $meta = $this->meta;
@@ -264,7 +293,8 @@ class RWMB_Choice_List_Walker extends RWMB_Walker
 	 * @param int    $depth  Depth of item. 
 	 * @param array  $args
 	 */
-	public function start_lvl( &$output, $depth = 0, $args = array() ) {
+	public function start_lvl( &$output, $depth = 0, $args = array() ) 
+	{
 		$output .= "<ul class='rwmb-choice-list'>";
 	}
 
@@ -275,7 +305,8 @@ class RWMB_Choice_List_Walker extends RWMB_Walker
 	 * @param int    $depth  Depth of item. 
 	 * @param array  $args
 	 */
-	public function end_lvl( &$output, $depth = 0, $args = array() ) {
+	public function end_lvl( &$output, $depth = 0, $args = array() ) 
+	{
 		$output .= "</ul>";
 	}
 
@@ -288,12 +319,14 @@ class RWMB_Choice_List_Walker extends RWMB_Walker
 	 * @param int    $current_object_id    Item ID.
 	 * @param array  $args
 	 */
-	public function start_el( &$output, $object, $depth = 0, $args = array(), $current_object_id = 0 ) {
-        $label					= $this->db_fields['label'];  
+	public function start_el( &$output, $object, $depth = 0, $args = array(), $current_object_id = 0 ) 
+	{
+		$label					= $this->db_fields['label'];  
         $id 					= $this->db_fields['id'];   
         $meta 					= $this->meta;
-		$attributes 			= $this->field['attributes'];
-		$attributes['value'] 	= $object->$id;
+		$field 					= $this->field;
+		$field_class 			= RW_Meta_Box::get_class_name( $field );
+		$attributes 			= call_user_func( array( $field_class, 'get_attributes' ), $field, $object->$id );
    
 		$output .= sprintf(
 			'<li><label><input %s %s>%s</label>',
@@ -311,7 +344,8 @@ class RWMB_Choice_List_Walker extends RWMB_Walker
 	 * @param int    $depth Depth of page. Not Used.
 	 * @param array  $args
 	 */
-	public function end_el( &$output, $page, $depth = 0, $args = array() ) {
+	public function end_el( &$output, $page, $depth = 0, $args = array() ) 
+	{
 		$output .= "</li>";
 	}  
 }
@@ -355,19 +389,21 @@ class RWMB_Select_Tree_Walker
 	
 	function display_level( $options, $parent_id = 0, $active = false )
 	{
-		$parent = $this->db_fields['parent'];
-		$label = $this->db_fields['label'];  
-		$id =  $this->db_fields['id'];  
-		$field = $this->field;
-		$meta = $this->meta;
-		$walker = new RWMB_Select_Walker( $this->db_fields, $this->field, $this->meta );
+		$parent 				= $this->db_fields['parent'];
+		$label					= $this->db_fields['label'];  
+		$id 					=  $this->db_fields['id'];  
+		$field 					= $this->field;
+		$meta					= $this->meta;
+		$walker 				= new RWMB_Select_Walker( $this->db_fields, $this->field, $this->meta );
+		$field_class 			= RW_Meta_Box::get_class_name( $field );
+		$attributes 			= call_user_func( array( $field_class, 'get_attributes' ), $field, $meta );
 		
 		$children = $options[$parent_id];
 		$output = sprintf( 
 			'<div class="rwmb-select-tree %s" data-parent-id="%s"><select %s>', 
 			$active ? '' : 'hidden', 
 			$parent_id, 
-			RWMB_Field::render_attributes( $this->field['attributes'] ) 
+			RWMB_Field::render_attributes( $attributes ) 
 		);
 		$output .= isset( $field['placeholder'] ) ? "<option value=''>{$field['placeholder']}</option>" : '<option></option>';
 		$output .= $walker->walk( $children, -1 );
